@@ -1,0 +1,190 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+/* The sprite sits on the bottom-right edge, leaving BOB_ROOM (12px, matching
+   main.js) of transparent headroom so the idle bob never clips the head, and
+   BUBBLE_WIDTH of transparent space on the left for the notification bubble. */
+body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  position: relative;
+}
+
+#pet {
+  height: calc(100% - 12px);
+  width: auto;
+  display: block;
+  -webkit-user-drag: none;
+  animation: breathe 4.2s ease-in-out infinite;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.28));
+}
+
+body.dragging {
+  cursor: grabbing;
+}
+
+/* Sit perfectly still at the resting pose while held. Pausing the animation
+   instead (animation-play-state: paused) froze the pet mid-cycle, so grabbing
+   it during the inhale half left it visibly puffed up and stuck — it looked
+   like the pet grew when you long-pressed it. */
+body.dragging #pet {
+  animation: none;
+}
+
+/* Deliberately no scale() here: a size change that can be frozen mid-cycle
+   reads as the pet growing. The idle motion is a float only. */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* --- new-item bubble --------------------------------------------------- */
+
+#bubble {
+  position: absolute;
+  left: 0;
+  bottom: 92px;
+  width: 196px;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border-radius: 14px;
+  background: rgba(22, 24, 31, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+  color: #eef1f7;
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  transform-origin: right bottom;
+  transition: opacity 0.28s ease, transform 0.28s ease;
+  pointer-events: none;
+}
+
+#bubble.show {
+  opacity: 1;
+  transform: none;
+}
+
+/* Tail pointing at the pet. */
+#bubble::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  bottom: 16px;
+  width: 12px;
+  height: 12px;
+  background: rgba(22, 24, 31, 0.92);
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  transform: rotate(-45deg);
+}
+
+#bubble-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffd479;
+  margin-bottom: 3px;
+}
+
+#bubble-title {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #d7dcea;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --- unread badge ------------------------------------------------------ */
+
+#badge {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  background: #ff5a5f;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 19px;
+  text-align: center;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  animation: badge-pop 0.35s ease;
+}
+
+#badge[hidden] {
+  display: none;
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- right-click menu -------------------------------------------------- */
+
+#menu {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  border-radius: 12px;
+  background: rgba(24, 26, 32, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+#menu[hidden] {
+  display: none;
+}
+
+#menu button {
+  font: 12px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: #e8ecf5;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 14px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#menu button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+#menu #menu-quit:hover {
+  background: rgba(200, 60, 60, 0.92);
+}

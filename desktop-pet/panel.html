@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>资讯摘要</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <header class="head" id="dragbar">
+        <div class="brand">
+          <span class="dot" id="dot"></span>
+          <div class="brand-text">
+            <div class="h1">资讯摘要</div>
+            <div class="sub" id="last-run">还没刷新</div>
+          </div>
+        </div>
+        <div class="head-actions">
+          <button class="icon" id="refresh" title="立即刷新 (F5)">⟳</button>
+          <button class="icon" id="settings-btn" title="设置">⚙</button>
+          <button class="icon" id="close" title="关闭 (Esc)">✕</button>
+        </div>
+      </header>
+
+      <div class="quick">
+        <input id="url-input" type="text" spellcheck="false" placeholder="粘贴网页链接，立刻抓取并摘要…" />
+        <button id="add-url">添加</button>
+      </div>
+
+      <div class="status" id="status" hidden></div>
+
+      <main class="list" id="list"></main>
+
+      <footer class="foot">
+        <button class="ghost" id="mark-all">全部已读</button>
+        <span class="counts" id="counts"></span>
+      </footer>
+
+      <!-- Settings slide-over -->
+      <section class="settings" id="settings" hidden>
+        <div class="settings-head">
+          <h2>设置</h2>
+          <button class="icon" id="settings-close" title="返回">✕</button>
+        </div>
+
+        <div class="settings-body">
+          <label class="row">
+            <span>自动刷新间隔</span>
+            <select id="interval">
+              <option value="15">每 15 分钟</option>
+              <option value="30">每 30 分钟</option>
+              <option value="60">每 1 小时</option>
+              <option value="120">每 2 小时</option>
+              <option value="240">每 4 小时</option>
+              <option value="480">每 8 小时</option>
+              <option value="720">每 12 小时</option>
+            </select>
+          </label>
+
+          <div class="group">
+            <div class="group-title">抓取站点</div>
+            <div class="hint">勾选后，这些页面会被定时检查，只抓新发布的链接。</div>
+            <div class="checklist" id="site-list"></div>
+            <div class="inline-add">
+              <input id="site-name" placeholder="名称" />
+              <input id="site-url" placeholder="https://…" spellcheck="false" />
+              <button class="mini" id="site-add">＋</button>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-title">关注主题</div>
+            <div class="hint">命中主题关键词的条目才会进摘要；标题命中权重最高。</div>
+            <div class="checklist" id="topic-list"></div>
+            <label class="row column">
+              <span>额外关键词</span>
+              <input id="extra-keywords" placeholder="用逗号分隔，例如：挑战杯, 保研, 大模型" />
+            </label>
+          </div>
+
+          <div class="group" id="skin-group">
+            <div class="group-title">桌宠皮肤</div>
+            <div class="hint">点一个即可换上；也可以把图片直接拖进这个面板，会自动去白底、裁到主体。</div>
+            <div class="skin-grid" id="skin-grid"></div>
+            <div class="btn-row">
+              <button class="mini" id="skin-import">导入图片…</button>
+              <input type="file" id="skin-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" hidden />
+              <span class="test-result" id="skin-status"></span>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-title">摘要引擎</div>
+            <div class="hint" id="llm-note">默认用本地规则抽取，不需要任何 key，离线可用。</div>
+            <label class="row">
+              <span>启用大模型摘要</span>
+              <input type="checkbox" id="llm-enabled" />
+            </label>
+            <label class="row column">
+              <span>接口地址（OpenAI 兼容）</span>
+              <input id="llm-base" placeholder="https://api.deepseek.com/v1" spellcheck="false" />
+            </label>
+            <label class="row column">
+              <span>模型</span>
+              <input id="llm-model" placeholder="deepseek-chat" spellcheck="false" />
+            </label>
+            <label class="row column">
+              <span>API Key</span>
+              <input id="llm-key" type="password" placeholder="留空 = 继续用本地规则摘要" spellcheck="false" />
+            </label>
+            <div class="btn-row">
+              <button class="mini" id="llm-test">测试连接</button>
+              <span class="test-result" id="llm-test-result"></span>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="group-title">维护</div>
+            <div class="btn-row">
+              <button class="mini" id="btn-refresh2">立即刷新</button>
+              <button class="mini danger" id="btn-clear">清空摘要</button>
+              <button class="mini danger" id="btn-reset">恢复默认</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-foot">
+          <button class="primary" id="settings-save">保存</button>
+          <button class="ghost" id="settings-cancel">取消</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="drop-hint" id="drop-hint" hidden>松手，就把这张图变成桌宠</div>
+
+    <script src="skinprep.js"></script>
+    <script src="panel.js"></script>
+  </body>
+</html>

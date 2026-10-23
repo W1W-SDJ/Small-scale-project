@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Blob Pet</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- New-item bubble: lives in the transparent strip left of the sprite. -->
+    <div id="bubble" aria-live="polite">
+      <div id="bubble-count"></div>
+      <div id="bubble-title"></div>
+    </div>
+
+    <img id="pet" src="assets/pet.png" alt="" draggable="false" />
+
+    <!-- Unread counter pinned to the sprite's shoulder. -->
+    <div id="badge" hidden>0</div>
+
+    <!-- Shown on right-click. In-window rather than a native menu because the
+         window is non-activatable (WS_EX_NOACTIVATE), where a native popup menu
+         cannot reliably take or release focus. -->
+    <div id="menu" hidden>
+      <button id="menu-digest" type="button">查看摘要</button>
+      <button id="menu-skin" type="button">换皮肤</button>
+      <button id="menu-refresh" type="button">立即刷新</button>
+      <button id="menu-quit" type="button">退出桌宠</button>
+    </div>
+
+    <!-- Prepared sprites: white-background matte + packed hit mask, in-browser. -->
+    <script src="skinprep.js"></script>
+    <script src="renderer.js"></script>
+  </body>
+</html>

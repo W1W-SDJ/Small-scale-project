@@ -1,0 +1,71 @@
+{
+  "name": "blob-pet",
+  "productName": "Blob Pet",
+  "version": "2.0.0",
+  "private": true,
+  "description": "A transparent, always-on-top desktop pet that watches your sites, keeps only what you care about, summarises it, and links straight to the original page.",
+  "main": "main.js",
+  "license": "MIT",
+  "author": "blob-pet contributors",
+  "keywords": [
+    "desktop-pet",
+    "electron",
+    "windows",
+    "transparent-window",
+    "always-on-top",
+    "rss",
+    "news-digest",
+    "summarizer",
+    "mascot"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "electron .",
+    "feed": "node tools/preview-feed.cjs",
+    "sprite": "node tools/matte.mjs && node tools/mask.mjs",
+    "matte": "node tools/matte.mjs",
+    "mask": "node tools/mask.mjs",
+    "skintest": "electron tools/test-skinprep.cjs",
+    "preview": "node tools/preview.mjs",
+    "capture": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/capture.ps1",
+    "dragtest": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/dragtest.ps1",
+    "fix-electron": "node tools/get-electron.mjs",
+    "dist": "npx --yes electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.blobpet.desktop",
+    "productName": "Blob Pet",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "style.css",
+      "panel.html",
+      "panel.css",
+      "panel.js",
+      "skinprep.js",
+      "core/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "BlobPet-${version}-portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.4.1",
+    "pngjs": "^7.0.0"
+  }
+}
