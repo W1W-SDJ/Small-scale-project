@@ -4,9 +4,9 @@ A draggable, transparent, always-on-top **desktop pet for Windows** that also re
 
 One sprite, two windows, no tray icon, no background service, no telemetry. It talks to the sites you configure and to nothing else.
 
-![Dragging Blob Pet across the desktop](docs/demo.gif)
+![The pet and its digest panel](docs/showcase.png)
 
-*Sits on top of everything, drags anywhere, and passes clicks through its transparent corners.*
+*Left: the digest panel — one screen of cards, each opening the original page. Right: the pet. Composed illustration, not a desktop screenshot; the panel appears when you click the pet.*
 
 ---
 
