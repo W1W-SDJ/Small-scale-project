@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build output (portable exe, folder build, zip) — never commit 100+ MB binaries
+dist/
+out/
+release/
+*.zip
+
+# local runtime state and logs
+*.log
+pet-state.json
+digest.json
+config.json
+
+# generated previews
+assets/pet-preview.png
+*-preview.png
+
+# OS / editors
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
