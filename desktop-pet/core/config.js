@@ -71,6 +71,8 @@ const DEFAULT_CONFIG = {
   },
   ui: {
     bubble: true,
+    // The idle float costs ~18% of one CPU core (see style.css); opt-in.
+    petAnimation: false,
     panelWidth: 392,
     panelHeight: 560,
     maxCards: 60,

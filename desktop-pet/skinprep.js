@@ -227,7 +227,16 @@
     return out
   }
 
-  /** One packed bit per pixel: set where the sprite should catch the mouse. */
+  /**
+   * One packed bit per pixel: set where the sprite should catch the mouse.
+   *
+   * Transparent holes *inside* the silhouette — the gap between an arm and the
+   * torso, between hair strands — are filled in. Without that, a press on one of
+   * them goes straight through to the desktop and the pet feels unresponsive at a
+   * spot that visually belongs to it. Holes that are reachable from the border are
+   * the real outside and stay click-through, so the window still does not block
+   * the desktop around the sprite.
+   */
   function buildMask(imageData, threshold) {
     const limit = threshold === undefined ? MASK_THRESHOLD : threshold
     const width = imageData.width
@@ -235,10 +244,51 @@
     const count = width * height
     const bytes = new Uint8Array(Math.ceil(count / 8))
     const data = imageData.data
+
+    const solid = new Uint8Array(count)
     for (let p = 0; p < count; p++) {
-      if (data[p * 4 + 3] >= limit) bytes[p >> 3] |= 1 << (7 - (p & 7))
+      if (data[p * 4 + 3] >= limit) solid[p] = 1
     }
-    return { width, height, threshold: limit, bytes }
+
+    // Flood the transparent pixels that are reachable from the border: those are
+    // the true outside. Whatever transparent pixel the flood never reaches is a
+    // hole inside the subject.
+    const outside = new Uint8Array(count)
+    const stack = new Int32Array(count)
+    let sp = 0
+    const seed = (p) => {
+      if (outside[p] || solid[p]) return
+      outside[p] = 1
+      stack[sp++] = p
+    }
+    for (let x = 0; x < width; x++) {
+      seed(x)
+      seed((height - 1) * width + x)
+    }
+    for (let y = 0; y < height; y++) {
+      seed(y * width)
+      seed(y * width + width - 1)
+    }
+    while (sp > 0) {
+      const p = stack[--sp]
+      const x = p % width
+      const y = (p - x) / width
+      if (x > 0) seed(p - 1)
+      if (x < width - 1) seed(p + 1)
+      if (y > 0) seed(p - width)
+      if (y < height - 1) seed(p + width)
+    }
+
+    let filled = 0
+    for (let p = 0; p < count; p++) {
+      let isSolid = solid[p]
+      if (!isSolid && !outside[p]) {
+        isSolid = 1 // an enclosed hole: part of the pet for input purposes
+        filled++
+      }
+      if (isSolid) bytes[p >> 3] |= 1 << (7 - (p & 7))
+    }
+    return { width, height, threshold: limit, bytes, holesFilled: filled }
   }
 
   /** How much of the image border is still opaque (i.e. background survived). */

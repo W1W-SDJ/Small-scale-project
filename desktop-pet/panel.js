@@ -179,6 +179,7 @@ const siteListEl = document.getElementById('site-list')
 const topicListEl = document.getElementById('topic-list')
 const extraEl = document.getElementById('extra-keywords')
 const llmEnabledEl = document.getElementById('llm-enabled')
+const petAnimationEl = document.getElementById('pet-animation')
 const llmBaseEl = document.getElementById('llm-base')
 const llmModelEl = document.getElementById('llm-model')
 const llmKeyEl = document.getElementById('llm-key')
@@ -231,6 +232,7 @@ function fillSettingsForm() {
   intervalEl.value = interval
   extraEl.value = (settings.extraKeywords || []).join(', ')
   llmEnabledEl.checked = Boolean(settings.llm?.enabled)
+  petAnimationEl.checked = Boolean(settings.ui?.petAnimation)
   llmBaseEl.value = settings.llm?.baseUrl || ''
   llmModelEl.value = settings.llm?.model || ''
   llmKeyEl.value = ''
@@ -318,6 +320,7 @@ document.getElementById('settings-save').addEventListener('click', async () => {
     sites: draft.sites,
     topics: draft.topics,
     extraKeywords: extraEl.value.split(/[,，\n]/).map((word) => word.trim()).filter(Boolean),
+    ui: { petAnimation: petAnimationEl.checked },
     llm: {
       enabled: llmEnabledEl.checked,
       baseUrl: llmBaseEl.value.trim(),
@@ -363,6 +366,12 @@ document.getElementById('btn-reset').addEventListener('click', async () => {
   applySnapshot(next)
   fillSettingsForm()
   showStatus('已恢复默认设置', { hideAfter: 4000 })
+})
+
+// Quit from here when the pet window itself is unresponsive (its right-click menu
+// lives inside a non-activatable window, so a stuck menu there is a dead end).
+document.getElementById('btn-quit').addEventListener('click', () => {
+  window.feed.quitApp()
 })
 
 // --- skins ----------------------------------------------------------------

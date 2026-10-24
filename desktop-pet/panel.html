@@ -84,9 +84,14 @@
             <div class="skin-grid" id="skin-grid"></div>
             <div class="btn-row">
               <button class="mini" id="skin-import">导入图片…</button>
-              <input type="file" id="skin-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" hidden />
+              <input type="file" id="skin-file" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp" hidden />
               <span class="test-result" id="skin-status"></span>
             </div>
+            <label class="row">
+              <span>待机浮动动画</span>
+              <input type="checkbox" id="pet-animation" />
+            </label>
+            <div class="hint">默认关闭：透明置顶窗口每帧都要重新合成，开着约占 18% 单核。想要"呼吸感"再打开。</div>
           </div>
 
           <div class="group">
@@ -120,6 +125,7 @@
               <button class="mini" id="btn-refresh2">立即刷新</button>
               <button class="mini danger" id="btn-clear">清空摘要</button>
               <button class="mini danger" id="btn-reset">恢复默认</button>
+              <button class="mini danger" id="btn-quit">退出桌宠</button>
             </div>
           </div>
         </div>

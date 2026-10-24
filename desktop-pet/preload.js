@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld('feed', {
   resetSettings: () => ipcRenderer.invoke('settings:reset'),
   testLlm: (patch) => ipcRenderer.invoke('settings:test-llm', patch),
   closePanel: () => ipcRenderer.send('panel:close'),
+  // Quitting from the panel is the escape hatch for a wedged pet window: the pet
+  // is deliberately non-activatable, so if its in-window menu gets stuck there is
+  // no other way to reach the app. The panel is an ordinary focusable window.
+  quitApp: () => ipcRenderer.send('app:quit'),
   // Skins are applied by the main process (it also resizes the pet window); the
   // panel only ever sends an id or already-prepared PNG bytes.
   skins: () => ipcRenderer.invoke('skin:list'),

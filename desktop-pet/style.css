@@ -22,12 +22,30 @@ body {
   position: relative;
 }
 
-#pet {
+/* The drop-shadow filter lives on the image and the float animation on the
+   wrapper, and the float is opt-in (body.animating).
+   Measured on this machine: with the float running, the pet's window costs about
+   18 % of one CPU core, continuously — a transparent always-on-top window has to
+   be re-composited every frame, and a filter on the animated element meant the
+   sprite was re-rasterised every frame as well. With the float off it is ~0 %.
+   For a background toy that trade is not worth making by default, so 面板 → ⚙ →
+   「待机浮动」 turns it on for people who want the charm more than the battery. */
+#pet-wrap {
   height: calc(100% - 12px);
+  display: flex;
+  align-items: flex-end;
+  will-change: transform;
+}
+
+body.animating #pet-wrap {
+  animation: breathe 4.2s ease-in-out infinite;
+}
+
+#pet {
+  height: 100%;
   width: auto;
   display: block;
   -webkit-user-drag: none;
-  animation: breathe 4.2s ease-in-out infinite;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.28));
 }
 
@@ -39,7 +57,7 @@ body.dragging {
    instead (animation-play-state: paused) froze the pet mid-cycle, so grabbing
    it during the inhale half left it visibly puffed up and stuck — it looked
    like the pet grew when you long-pressed it. */
-body.dragging #pet {
+body.dragging #pet-wrap {
   animation: none;
 }
 

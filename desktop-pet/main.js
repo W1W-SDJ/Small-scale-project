@@ -694,6 +694,11 @@ function applySettings(patch = {}) {
     if (llm.apiKey) next.llm.apiKey = String(llm.apiKey).trim()
     if (llm.clearKey) next.llm.apiKey = ''
   }
+  if (patch.ui !== undefined) {
+    const ui = patch.ui || {}
+    next.ui = { ...next.ui }
+    if (ui.petAnimation !== undefined) next.ui.petAnimation = Boolean(ui.petAnimation)
+  }
   config = next
   store.writeConfig(config)
   scheduleNext((Number(config.intervalMinutes) || 60) * 60000)
@@ -760,6 +765,12 @@ ipcMain.on('pet:open-skins', () => {
 ipcMain.on('app:log', (_event, message) => diag(`renderer: ${message}`))
 
 ipcMain.on('pet:quit', () => app.quit())
+
+/** Quit requested from the digest panel (works even if the pet window is wedged). */
+ipcMain.on('app:quit', () => {
+  diag('quit requested from panel')
+  app.quit()
+})
 
 ipcMain.on('panel:close', (event) => {
   let from = '?'

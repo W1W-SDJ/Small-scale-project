@@ -33,20 +33,30 @@ let dragging = false
 let menuOpen = false
 let pointerStart = null
 let bubbleTimer = null
+let menuTimer = null
 
-function setIgnore(next) {
+/** A menu that cannot be dismissed is a trap: a click on a transparent pixel goes
+ *  to the desktop and never reaches the page, so nothing closes it. Time it out. */
+const MENU_AUTO_CLOSE_MS = 20000
+
+function setIgnore(next, reason) {
   if (next === ignoring) return
   ignoring = next
+  window.pet.log(`ignore ${next} (${reason})`)
   window.pet.setIgnoreMouse(next)
 }
 
 function updateHitTest(clientX, clientY) {
-  if (dragging || menuOpen) {
-    setIgnore(false)
+  if (dragging) {
+    setIgnore(false, 'dragging')
+    return
+  }
+  if (menuOpen) {
+    setIgnore(false, 'menu-open')
     return
   }
   if (!MASK) {
-    setIgnore(false)
+    setIgnore(false, 'no-mask')
     return
   }
   // getBoundingClientRect reflects the bob animation, so mapping through it
@@ -55,10 +65,15 @@ function updateHitTest(clientX, clientY) {
   if (rect.width === 0 || rect.height === 0) return
   const x = Math.floor(((clientX - rect.left) / rect.width) * MASK.width)
   const y = Math.floor(((clientY - rect.top) / rect.height) * MASK.height)
-  setIgnore(!solidAt(x, y))
+  const solid = solidAt(x, y)
+  setIgnore(!solid, solid ? 'sprite' : 'gap')
 }
 
 function closeMenu() {
+  if (menuTimer) {
+    clearTimeout(menuTimer)
+    menuTimer = null
+  }
   if (!menuOpen) return
   menuOpen = false
   menu.hidden = true
@@ -67,6 +82,22 @@ function closeMenu() {
 window.addEventListener('mousemove', (event) => {
   updateHitTest(event.clientX, event.clientY)
 })
+
+// Every press gets a line, including the ones that land outside the image: "the
+// pet stopped responding" is almost always "pointerdown never fired", and that is
+// only distinguishable from the outside if the presses are recorded.
+window.addEventListener(
+  'pointerdown',
+  (event) => {
+    const rect = img.getBoundingClientRect()
+    const inImg = event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom
+    window.pet.log(
+      `pointerdown b=${event.button} at=${Math.round(event.clientX)},${Math.round(event.clientY)} ` +
+        `tgt=${event.target === img ? 'img' : event.target?.id || event.target?.tagName} inImg=${inImg} ignoring=${ignoring}`,
+    )
+  },
+  true,
+)
 
 // --- skins ----------------------------------------------------------------
 
@@ -116,7 +147,7 @@ img.addEventListener('pointerdown', (event) => {
   dragging = true
   pointerStart = { x: event.screenX, y: event.screenY, at: Date.now() }
   document.body.classList.add('dragging')
-  setIgnore(false)
+  setIgnore(false, 'drag-start')
   img.setPointerCapture(event.pointerId)
   window.pet.dragStart()
 })
@@ -149,6 +180,7 @@ window.addEventListener('pointerup', (event) => {
 })
 
 window.addEventListener('pointercancel', () => {
+  window.pet.log(`pointercancel hasStart=${Boolean(pointerStart)} dragging=${dragging}`)
   pointerStart = null
   endDrag()
 })
@@ -159,7 +191,12 @@ window.addEventListener('contextmenu', (event) => {
   if (dragging) return
   menuOpen = true
   menu.hidden = false
-  setIgnore(false)
+  setIgnore(false, 'menu-open')
+  if (menuTimer) clearTimeout(menuTimer)
+  menuTimer = setTimeout(() => {
+    window.pet.log('menu auto-closed after timeout')
+    closeMenu()
+  }, MENU_AUTO_CLOSE_MS)
 })
 
 window.addEventListener(
@@ -216,13 +253,24 @@ function showBubble(payload) {
   bubbleTimer = setTimeout(() => bubble.classList.remove('show'), Number(payload.durationMs) || 9000)
 }
 
-window.feed.onSnapshot((snapshot) => renderBadge(snapshot?.unread))
+/** The idle float is opt-in because it costs ~18% of a core (see style.css). */
+function applyAnimationSetting(snapshot) {
+  const on = Boolean(snapshot?.settings?.ui?.petAnimation)
+  document.body.classList.toggle('animating', on)
+}
+
+function applySnapshot(snapshot) {
+  renderBadge(snapshot?.unread)
+  applyAnimationSetting(snapshot)
+}
+
+window.feed.onSnapshot(applySnapshot)
 window.feed.onNew(showBubble)
 window.pet.onSkin((skin) => applySkinPayload(skin))
 
 window.feed
   .snapshot()
-  .then((snapshot) => renderBadge(snapshot?.unread))
+  .then(applySnapshot)
   .catch(() => {})
 
 // The main process also pushes the skin on did-finish-load, but ask once more so
