@@ -148,7 +148,9 @@ node tools/resize.mjs b.png assets/skins/<id>/pet.png --height=900
 | `dist\BlobPet-2.0.0-portable.exe` | 单文件，96 MB | 对方机器没有强制开启 Smart App Control：双击即用，最省事 |
 | `dist\BlobPet-2.0.0-folder\` | 文件夹，369 MB，双击 `start-pet.cmd` | **对方开启了 Smart App Control（强制模式）时只能用它** |
 
-**为什么会有这个区别**：Smart App Control 处于强制模式时，会拦截所有未签名且没有信誉记录的 exe —— 我们自己的 `Blob Pet.exe` 正是这种。但 Chromium/Electron 官方的 `electron.exe` 有有效签名和信誉，能放行。文件夹版就是"用签名版 electron.exe + 我们自己的 `resources\app.asar`"，所以能过。
+**为什么会有这个区别**：Smart App Control 强制模式下会拦截"未签名且没有信誉记录"的 exe——我们自己的 `Blob Pet.exe` 正是这种。而 Electron 官方的 `electron.exe` **虽然没有数字签名，但是被大量用户使用过的已知文件，享有信誉**，所以能放行。文件夹版就是把**未经修改的官方 electron.exe** 和我们自己的 `resources\app.asar` 放在一起。
+
+关键在"未经修改"：Electron 的 Windows 二进制本身是 `NotSigned` 的（实测 `Get-AuthenticodeSignature` 返回 NotSigned），electron-builder 会改写 exe 的图标/版本资源，哈希一变就丢了信誉——这就是 `win-unpacked\Blob Pet.exe` 被拦、而文件夹版能过原因。
 
 两条都改的是对方自己机器上的 `%APPDATA%\Blob Pet\config.json`，跟你互不影响。想让别人一开箱就盯你想要的站：改 `core/config.js` 里的 `DEFAULT_SITES` / `DEFAULT_TOPICS` 再打包。
 
@@ -275,7 +277,7 @@ Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' | Select Ver
 
 被拦时的系统事件：`Microsoft-Windows-CodeIntegrity/Operational` 里的 **3033 / 3077**，会写明是哪个 exe。三种绕过方式：
 
-1. 用文件夹版 `dist\BlobPet-2.0.0-folder\start-pet.cmd`（复用签名版 electron.exe，不需要改任何安全设置）；
+1. 用文件夹版 `dist\BlobPet-2.0.0-folder\start-pet.cmd`（里面是未修改的官方 electron.exe，不需要改任何安全设置）；
 2. 从源码跑 `npm start`（同样不涉及未签名二进制）；
 3. 关闭 Smart App Control（设置 → 隐私和安全性 → Windows 安全中心 → 应用和浏览器控制 → 智能应用控制 → 关闭）。这是系统级安全选择，关掉后重新开启需要重装系统，请自行权衡。
 
@@ -310,7 +312,7 @@ npm run dist          # 产出 dist\BlobPet-2.0.0-portable.exe（单文件）
   ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
   ```
 
-**文件夹版（Smart App Control 强制模式下可用）** 的构造很直接：Electron 的签名二进制 + 我们的 asar。
+**文件夹版（Smart App Control 强制模式下可用）** 的构造很直接：Electron 官方**未修改**的二进制 + 我们的 asar。
 
 ```bash
 npx electron-builder --win dir        # 产出 dist\win-unpacked

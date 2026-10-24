@@ -268,10 +268,15 @@ Get-AuthenticodeSignature .\dist\BlobPet-2.0.0-portable.exe | Select Status
 extracts and launches our own unsigned `Blob Pet.exe`, so the inner binary is what gets blocked;
 the wrapper just exits with code 1.
 
-The workaround needs no security-setting change: Electron's own `electron.exe` *is* validly signed
-and has reputation, so shipping it unchanged next to our `resources\app.asar` runs the identical
-app. `dist\BlobPet-2.0.0-folder\` is exactly that (see the README). This is also why "run from
-source" never hit the problem: no unsigned image is loaded, only JS and the asar.
+The workaround needs no security-setting change: our `electron.exe` is byte-identical to the official
+release binary, and *that* binary carries reputation with Microsoft's service. This is worth stating
+precisely because it is easy to get wrong — the official `electron.exe` is **not** Authenticode-signed
+either (`Get-AuthenticodeSignature` reports `NotSigned` for it). What protects it is reputation, not a
+signature, so changing a single byte throws the trust away: electron-builder rewrites the icon and
+version resources, which is exactly why `win-unpacked\Blob Pet.exe` (sha256 `BE2556…`, 512 bytes
+larger) is blocked while this folder form (sha256 `4E0699…`) runs.
+`dist\BlobPet-2.0.0-folder\` is that form (see the README). This is also why "run from source" never
+hit the problem: no unsigned image is loaded, only JS and the asar.
 
 Practical consequence for delivery: a single-file exe is the nicer product but is only usable where
 Smart App Control is off/permissive (or where the user explicitly allows it). The folder form is
