@@ -106,15 +106,24 @@ jobs:
           tar.exe -xf $zipPath -C $out
           if ($LASTEXITCODE -ne 0) { Expand-Archive -Path $zipPath -DestinationPath $out -Force }
 
+          # Electron's Windows binaries are NOT Authenticode-signed (verified:
+          # Get-AuthenticodeSignature returns NotSigned for the official
+          # electron.exe). What makes the folder form usable under Smart App Control
+          # is that the file is byte-identical to the widely-seen official binary, so
+          # it carries reputation. electron-builder's own copy is rewritten (icon and
+          # version resources), which changes the hash and loses that reputation —
+          # that is exactly why this form exists. Assert we ship it untouched.
+          $electronHash = (Get-FileHash (Join-Path $out 'electron.exe') -Algorithm SHA256).Hash
+          Write-Host "electron.exe sha256=$electronHash (unsigned; trusted by reputation)"
+
           Copy-Item dist/win-unpacked/resources/app.asar "$out/resources/app.asar" -Force
           Copy-Item start-pet.cmd $out -Force
           Copy-Item packaging/* $out -Force
 
-          # The whole point of this distribution is that its binary is signed and has
-          # reputation. Assert it instead of assuming it.
-          $sig = Get-AuthenticodeSignature (Join-Path $out 'electron.exe')
-          Write-Host "electron.exe signature: $($sig.Status) — $($sig.SignerCertificate.Subject)"
-          if ($sig.Status -ne 'Valid') { throw "electron.exe is not validly signed ($($sig.Status)); the SAC-safe form would be pointless" }
+          $afterCopy = (Get-FileHash (Join-Path $out 'electron.exe') -Algorithm SHA256).Hash
+          if ($afterCopy -ne $electronHash) {
+            throw "electron.exe changed after extraction ($electronHash -> $afterCopy); the folder form would lose its reputation"
+          }
 
           & 'C:\Program Files\7-Zip\7z.exe' a -tzip -mx=7 -mm=Deflate "dist/BlobPet-$version-win64.zip" $out | Select-Object -Last 3
           if ($LASTEXITCODE -ne 0) { throw "7z failed with $LASTEXITCODE" }
