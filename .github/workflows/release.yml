@@ -72,22 +72,53 @@ jobs:
       - name: Build folder form (Smart App Control safe)
         shell: pwsh
         run: |
-          # `dir` target gives us resources/app.asar; the runnable form needs
-          # Electron's own signed binary next to it, not the renamed copy.
+          # `dir` target gives us resources/app.asar, but NOT the binary we want to
+          # ship: electron-builder rewrites the icon/version resources of the exe,
+          # which invalidates its Authenticode signature, and Smart App Control then
+          # blocks it silently. So the folder form pairs our app.asar with an
+          # untouched, still-signed official electron.exe.
           npx --yes electron-builder --win dir
 
           $version = '${{ steps.version.outputs.version }}'
+          $electronVersion = (Get-Content node_modules/electron/package.json -Raw | ConvertFrom-Json).version
           $out = "dist/BlobPet-$version-win64"
           New-Item -ItemType Directory -Force $out | Out-Null
-          Copy-Item node_modules/electron/dist/* $out -Recurse -Force
+
+          # electron's own postinstall does not run in CI, so node_modules/electron/dist
+          # is empty; take the official zip from electron-builder's cache if present,
+          # otherwise fetch it once.
+          $zipName = "electron-v$electronVersion-win32-x64.zip"
+          $cacheRoot = Join-Path $env:LOCALAPPDATA 'electron\Cache'
+          $zipPath = $null
+          if (Test-Path $cacheRoot) {
+            $zipPath = Get-ChildItem $cacheRoot -Recurse -Filter $zipName -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $zipPath) {
+            $zipPath = Join-Path $env:RUNNER_TEMP $zipName
+            $url = "https://github.com/electron/electron/releases/download/v$electronVersion/$zipName"
+            Write-Host "downloading $url"
+            curl.exe -L --fail --retry 3 --max-time 600 -o $zipPath $url
+            if ($LASTEXITCODE -ne 0) { throw "electron download failed ($LASTEXITCODE)" }
+          }
+          Write-Host "using electron zip: $zipPath"
+
+          tar.exe -xf $zipPath -C $out
+          if ($LASTEXITCODE -ne 0) { Expand-Archive -Path $zipPath -DestinationPath $out -Force }
+
           Copy-Item dist/win-unpacked/resources/app.asar "$out/resources/app.asar" -Force
           Copy-Item start-pet.cmd $out -Force
           Copy-Item packaging/* $out -Force
 
-          # 7-Zip instead of Compress-Archive: it writes spec-compliant entry
-          # names (forward slashes) and is several times faster on 370 MB.
+          # The whole point of this distribution is that its binary is signed and has
+          # reputation. Assert it instead of assuming it.
+          $sig = Get-AuthenticodeSignature (Join-Path $out 'electron.exe')
+          Write-Host "electron.exe signature: $($sig.Status) — $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "electron.exe is not validly signed ($($sig.Status)); the SAC-safe form would be pointless" }
+
           & 'C:\Program Files\7-Zip\7z.exe' a -tzip -mx=7 -mm=Deflate "dist/BlobPet-$version-win64.zip" $out | Select-Object -Last 3
           if ($LASTEXITCODE -ne 0) { throw "7z failed with $LASTEXITCODE" }
+          Get-Item "dist/BlobPet-$version-win64.zip" | Select-Object Name, @{n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } }
 
       - name: Write checksums
         shell: pwsh
