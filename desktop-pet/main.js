@@ -127,6 +127,77 @@ let refreshTimer = null
 /** A section the panel should jump to once it has actually loaded. */
 let pendingPanelSection = null
 
+/**
+ * Renderer recovery.
+ *
+ * A crashed Chromium renderer does not close its window — the window keeps showing
+ * the last painted frame and stops handling input. To a user that is "the pet is
+ * frozen": it cannot be dragged, clicked, or quit from its own menu. The page holds
+ * no state of its own (skin, badge, bubble all come from this process), so reloading
+ * it restores everything. Crashes are logged as render-process-gone; hangs show up
+ * as 'unresponsive' first and get a grace period before the same treatment.
+ */
+const UNRESPONSIVE_GRACE_MS = 5000
+const RENDERER_RECOVERY_LIMIT = 3
+let unresponsiveTimer = null
+let rendererRecoveries = 0
+
+/**
+ * Replace the pet window after its renderer died or hung.
+ *
+ * Reloading the page is not enough: the window keeps WS_EX_TRANSPARENT and the
+ * mouse-forwarding hook Chromium installs for `setIgnoreMouseEvents(true, {forward})`
+ * does not survive the renderer, so the pet comes back painted but permanently deaf
+ * to the mouse — verified by killing the renderer and watching the window stay
+ * transparent with no mousemove delivered at all. A fresh window has none of that
+ * state. The replacement is created before the old one is destroyed, so the app
+ * never has zero windows (which would fire window-all-closed and quit).
+ */
+function recreatePetWindow(reason) {
+  if (rendererRecoveries >= RENDERER_RECOVERY_LIMIT) {
+    diag(`pet window recovery skipped (${reason}): already recovered ${rendererRecoveries}×`)
+    return
+  }
+  rendererRecoveries += 1
+  const old = petWin
+  diag(`recreating pet window (${reason}) attempt=${rendererRecoveries}`)
+
+  // createWindow() restores the position from the state file, so record where the
+  // pet is right now before the old window goes away.
+  try {
+    if (old && !old.isDestroyed()) {
+      const b = old.getBounds()
+      store.writeState({ position: { x: b.x, y: b.y }, width: b.width })
+    }
+  } catch (error) {
+    diag(`could not record position before recovery: ${error?.message ?? String(error)}`)
+  }
+
+  try {
+    createWindow()
+  } catch (error) {
+    diag(`recreate pet window failed ${error?.stack ?? String(error)}`)
+    return
+  }
+
+  const fresh = petWin
+  const dropOld = () => {
+    if (old && !old.isDestroyed()) {
+      try {
+        old.destroy()
+      } catch (error) {
+        diag(`destroy old pet window failed ${error?.message ?? String(error)}`)
+      }
+    }
+  }
+  if (fresh && !fresh.isDestroyed()) fresh.webContents.once('did-finish-load', dropOld)
+  setTimeout(dropOld, 4000)
+
+  setTimeout(() => {
+    rendererRecoveries = Math.max(0, rendererRecoveries - 1)
+  }, 5 * 60 * 1000)
+}
+
 function defaultPosition(w, h) {
   const area = screen.getPrimaryDisplay().workArea
   return { x: area.x + area.width - w - 40, y: area.y + area.height - h - 20 }
@@ -430,6 +501,17 @@ function createWindow() {
 
   petWin.webContents.on('did-finish-load', () => {
     diag('did-finish-load')
+    // A reloaded page starts with its own `ignoring = false`, but the window keeps
+    // whatever click-through mode the previous page last set. If the renderer died
+    // while the cursor was over transparent pixels, nothing would ever make the
+    // window interactive again — the pet would be visible and permanently dead to
+    // input. Reset it on every load.
+    try {
+      petWin.setIgnoreMouseEvents(false)
+      diag('mouse events reset to interactive after load')
+    } catch (error) {
+      diag(`reset ignore-mouse failed ${error?.message ?? String(error)}`)
+    }
     sendSkinToPet(currentSkin())
     broadcastSnapshot()
   })
@@ -437,13 +519,33 @@ function createWindow() {
     diag(`did-fail-load ${code} ${description} ${url}`)
   })
   petWin.webContents.on('render-process-gone', (_event, details) => {
+    // A dead renderer leaves the window showing its last frame: nothing repaints
+    // and no input is handled, so the pet looks frozen exactly where it is drawn —
+    // that is what "桌宠卡了，点不出面板也退不出" turned out to be. Reload it; all
+    // state lives in this process, so the pet comes back with the same skin,
+    // badge and bubble.
     diag(`render-process-gone ${JSON.stringify(details)}`)
+    recreatePetWindow(`render-process-gone:${details.reason}`)
   })
-  petWin.webContents.on('unresponsive', () => diag('renderer unresponsive'))
+  petWin.webContents.on('unresponsive', () => {
+    diag('renderer unresponsive')
+    unresponsiveTimer = setTimeout(() => recreatePetWindow('unresponsive'), UNRESPONSIVE_GRACE_MS)
+  })
+  petWin.webContents.on('responsive', () => {
+    if (unresponsiveTimer) {
+      clearTimeout(unresponsiveTimer)
+      unresponsiveTimer = null
+      diag('renderer responsive again')
+    }
+  })
 
   petWin.loadFile(path.join(__dirname, 'index.html'))
+  // Only forget the reference if it is still *this* window: during a crash
+  // recovery the new window is created first, and the old one closing later must
+  // not null the replacement out.
+  const thisWindow = petWin
   petWin.on('closed', () => {
-    petWin = null
+    if (petWin === thisWindow) petWin = null
   })
 
   // Persist the starting spot immediately, so the state file always reflects
@@ -548,7 +650,10 @@ function createPanelWindow() {
     diag(`panel did-fail-load ${code} ${description} ${url}`)
   })
   panelWin.webContents.on('render-process-gone', (_event, details) => {
+    // The panel is disposable: destroying it means the next open creates a healthy
+    // one, and a dead invisible window cannot linger.
     diag(`panel render-process-gone ${JSON.stringify(details)}`)
+    destroyPanel()
   })
   panelWin.webContents.on('did-finish-load', () => {
     sendToPanel('feed:snapshot', snapshot())

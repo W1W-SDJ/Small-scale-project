@@ -228,16 +228,80 @@
   }
 
   /**
+   * Separable max (dilate) / min (erode) over a square structuring element.
+   * Two 1-D passes instead of one 2-D scan: O(pixels × radius) rather than
+   * O(pixels × radius²), which matters at 700k pixels on every skin change.
+   */
+  function maxFilter(src, width, height, radius) {
+    const tmp = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      const row = y * width
+      for (let x = 0; x < width; x++) {
+        let value = 0
+        for (let k = -radius; k <= radius && !value; k++) {
+          const nx = x + k
+          if (nx >= 0 && nx < width && src[row + nx]) value = 1
+        }
+        tmp[row + x] = value
+      }
+    }
+    const out = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let value = 0
+        for (let k = -radius; k <= radius && !value; k++) {
+          const ny = y + k
+          if (ny >= 0 && ny < height && tmp[ny * width + x]) value = 1
+        }
+        out[y * width + x] = value
+      }
+    }
+    return out
+  }
+
+  function minFilter(src, width, height, radius) {
+    const tmp = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      const row = y * width
+      for (let x = 0; x < width; x++) {
+        let value = 1
+        for (let k = -radius; k <= radius && value; k++) {
+          const nx = x + k
+          if (nx >= 0 && nx < width && !src[row + nx]) value = 0
+        }
+        tmp[row + x] = value
+      }
+    }
+    const out = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let value = 1
+        for (let k = -radius; k <= radius && value; k++) {
+          const ny = y + k
+          if (ny >= 0 && ny < height && !tmp[ny * width + x]) value = 0
+        }
+        out[y * width + x] = value
+      }
+    }
+    return out
+  }
+
+  /**
    * One packed bit per pixel: set where the sprite should catch the mouse.
    *
-   * Transparent holes *inside* the silhouette — the gap between an arm and the
-   * torso, between hair strands — are filled in. Without that, a press on one of
-   * them goes straight through to the desktop and the pet feels unresponsive at a
-   * spot that visually belongs to it. Holes that are reachable from the border are
-   * the real outside and stay click-through, so the window still does not block
-   * the desktop around the sprite.
+   * A plain alpha threshold is too aggressive for illustrated sprites: hair
+   * strands, the gap between an arm and the torso, the space between the legs are
+   * all transparent *and* open to the outside, so a press on them goes straight
+   * through to the desktop. To the user the pet simply stops responding wherever
+   * it is drawn but transparent — clicks land on the wallpaper and the window only
+   * sees the release (a pointerup with no pointerdown).
+   *
+   * A morphological closing fixes it: dilate then erode with a square element
+   * whose radius scales with the sprite. Gaps narrower than 2R get filled in, while
+   * the outer silhouette stays exactly where it is (closing is extensive but does
+   * not grow a shape's outline), so the desktop around the pet is still clickable.
    */
-  function buildMask(imageData, threshold) {
+  function buildMask(imageData, threshold, closingRadius) {
     const limit = threshold === undefined ? MASK_THRESHOLD : threshold
     const width = imageData.width
     const height = imageData.height
@@ -250,45 +314,22 @@
       if (data[p * 4 + 3] >= limit) solid[p] = 1
     }
 
-    // Flood the transparent pixels that are reachable from the border: those are
-    // the true outside. Whatever transparent pixel the flood never reaches is a
-    // hole inside the subject.
-    const outside = new Uint8Array(count)
-    const stack = new Int32Array(count)
-    let sp = 0
-    const seed = (p) => {
-      if (outside[p] || solid[p]) return
-      outside[p] = 1
-      stack[sp++] = p
-    }
-    for (let x = 0; x < width; x++) {
-      seed(x)
-      seed((height - 1) * width + x)
-    }
-    for (let y = 0; y < height; y++) {
-      seed(y * width)
-      seed(y * width + width - 1)
-    }
-    while (sp > 0) {
-      const p = stack[--sp]
-      const x = p % width
-      const y = (p - x) / width
-      if (x > 0) seed(p - 1)
-      if (x < width - 1) seed(p + 1)
-      if (y > 0) seed(p - width)
-      if (y < height - 1) seed(p + width)
+    // Radius in source pixels: ~1.2% of the sprite height. At the display scale a
+    // 900px sprite is drawn ~340 DIP tall, so this closes gaps up to ~8 DIP wide.
+    const radius =
+      closingRadius === undefined ? Math.max(1, Math.round(height * 0.05)) : Math.max(0, Math.round(closingRadius))
+
+    let closed = solid
+    if (radius > 0) {
+      closed = minFilter(maxFilter(solid, width, height, radius), width, height, radius)
     }
 
     let filled = 0
     for (let p = 0; p < count; p++) {
-      let isSolid = solid[p]
-      if (!isSolid && !outside[p]) {
-        isSolid = 1 // an enclosed hole: part of the pet for input purposes
-        filled++
-      }
-      if (isSolid) bytes[p >> 3] |= 1 << (7 - (p & 7))
+      if (closed[p]) bytes[p >> 3] |= 1 << (7 - (p & 7))
+      else if (solid[p]) filled++ // only counted for the caller's diagnostics
     }
-    return { width, height, threshold: limit, bytes, holesFilled: filled }
+    return { width, height, threshold: limit, bytes, closingRadius: radius, gapsFilled: filled }
   }
 
   /** How much of the image border is still opaque (i.e. background survived). */
