@@ -1,0 +1,119 @@
+name: Release
+
+# NOTE: GitHub only reads workflows from the *repository root*
+# `.github/workflows/`, and this repo keeps the project in `desktop-pet/`.
+# This file is therefore published to `<repo root>/.github/workflows/release.yml`
+# (a copy kept here next to the code it builds); a copy inside desktop-pet/ is
+# inert — GitHub never looks there.
+#
+# Builds both Windows distributions of the pet and (on a tag) attaches them to the
+# GitHub release:
+#
+#   BlobPet-<ver>-portable.exe   single file, double-click to run
+#   BlobPet-<ver>-win64.zip      folder form, unzip + start-pet.cmd
+#
+# Why two: the single-file exe is an unsigned NSIS wrapper around our unsigned
+# "Blob Pet.exe", and Windows 11 Smart App Control (enforcement mode) blocks it
+# silently. The folder form ships Chromium's own signed electron.exe next to our
+# app.asar, which runs without asking the user to change any security setting.
+#
+# The project lives in desktop-pet/, so every build step is scoped there.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: desktop-pet
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop-pet/package-lock.json
+
+      # Reads package-lock.json, so an out-of-sync lockfile fails here loudly
+      # instead of producing a build nobody can reproduce.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve version from the tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_NAME -match '^v(.+)$') { $Matches[1] } else { (Get-Content package.json -Raw | ConvertFrom-Json).version }
+          $pkgVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($version -ne $pkgVersion) {
+            Write-Host "package.json says $pkgVersion, tag says $version - building as $version"
+            npm version $version --no-git-tag-version --allow-same-version | Out-Null
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build single-file portable exe
+        run: npx --yes electron-builder --win portable
+
+      - name: Build folder form (Smart App Control safe)
+        shell: pwsh
+        run: |
+          # `dir` target gives us resources/app.asar; the runnable form needs
+          # Electron's own signed binary next to it, not the renamed copy.
+          npx --yes electron-builder --win dir
+
+          $version = '${{ steps.version.outputs.version }}'
+          $out = "dist/BlobPet-$version-win64"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item node_modules/electron/dist/* $out -Recurse -Force
+          Copy-Item dist/win-unpacked/resources/app.asar "$out/resources/app.asar" -Force
+          Copy-Item start-pet.cmd $out -Force
+          Copy-Item packaging/* $out -Force
+
+          # 7-Zip instead of Compress-Archive: it writes spec-compliant entry
+          # names (forward slashes) and is several times faster on 370 MB.
+          & 'C:\Program Files\7-Zip\7z.exe' a -tzip -mx=7 -mm=Deflate "dist/BlobPet-$version-win64.zip" $out | Select-Object -Last 3
+          if ($LASTEXITCODE -ne 0) { throw "7z failed with $LASTEXITCODE" }
+
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem dist -File | Where-Object { $_.Name -match '^BlobPet-.*\.(exe|zip)$' } |
+            ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } |
+            Set-Content -Encoding ascii dist/SHA256SUMS.txt
+          Get-Content dist/SHA256SUMS.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlobPet-${{ steps.version.outputs.version }}
+          path: |
+            desktop-pet/dist/BlobPet-*.exe
+            desktop-pet/dist/BlobPet-*.zip
+            desktop-pet/dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop-pet/dist/BlobPet-*.exe
+            desktop-pet/dist/BlobPet-*.zip
+            desktop-pet/dist/SHA256SUMS.txt
+          generate_release_notes: true
+          fail_on_unmatched_files: true
